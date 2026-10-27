@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: sakthi-finance-rag
+Version: 0.1.0
+Summary: Financial Document RAG System for Sakthi Finance
+Author: Praveen
+Requires-Python: >=3.11
+Requires-Dist: psycopg[binary]>=3.2.0
+Requires-Dist: pgvector>=0.3.0
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: pydantic-settings>=2.2.0
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: rich>=13.7.0
+Requires-Dist: typer>=0.12.0
+Requires-Dist: requests>=2.31.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: PyMuPDF>=1.24.0
+Requires-Dist: tabulate>=0.9.0
+Requires-Dist: numpy>=1.26.0

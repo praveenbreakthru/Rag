@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sakthi-finance-rag"
+version = "0.1.0"
+description = "Financial Document RAG System for Sakthi Finance"
+authors = [{ name = "Praveen" }]
+requires-python = ">=3.11"
+dependencies = [
+    "psycopg[binary]>=3.2.0",
+    "pgvector>=0.3.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.2.0",
+    "python-dotenv>=1.0.1",
+    "rich>=13.7.0",
+    "typer>=0.12.0",
+    "requests>=2.31.0",
+    "httpx>=0.27.0",
+    "PyMuPDF>=1.24.0",
+    "tabulate>=0.9.0",
+    "numpy>=1.26.0",
+]
+
+[project.scripts]
+ragcli = "ragcli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
