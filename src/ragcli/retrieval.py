@@ -140,7 +140,7 @@ class HybridRetriever:
 
         # 1. Natural phrase matching using phraseto_tsquery (handles stop words naturally, e.g. "Repairs and Maintenance")
         GENERIC_STOP = STOP_WORDS | COMPANY_BOILERPLATE | {
-            "year", "ended", "march", "31st", "2022", "2023", "2024", "2025", "period", "financial",
+            "year", "ended", "march", "31st", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026", "period", "financial",
             "as", "at", "total", "end", "to", "of", "in", "and", "or", "the", "for", "from"
         }
         clean_words = [w for w in re.findall(r"\b[a-zA-Z0-9_-]+\b", query_text)]
@@ -599,16 +599,16 @@ class HybridRetriever:
         q_years = set()
         search_q = f"{query} {normalized_q}"
         # Pattern 1: '2023 to 2024', '2023 and 2024' (with or without 'fy' on either part)
-        for ym in re.finditer(r"(?:fy\s*)?(202[2-5])\s+(?:to|and)\s+(?:fy\s*)?(?:20)?(2[3-6])\b", search_q, re.IGNORECASE):
+        for ym in re.finditer(r"(?:fy\s*)?(20[1-2][0-9])\s+(?:to|and)\s+(?:fy\s*)?(?:20)?([0-3][0-9])\b", search_q, re.IGNORECASE):
             q_years.add(ym.group(1)[-2:])
             q_years.add(ym.group(2))
         # Pattern 2: '2023-24', '2023/24', '2023-2024', 'fy2023-2024', 'fy2022-fy2023', 'fy2023-2022', 'FY 2023-24'
-        for ym in re.finditer(r"(?:fy\s*)?(202[2-5])[-/](?:fy\s*)?(?:20)?(2[2-6])\b", search_q, re.IGNORECASE):
+        for ym in re.finditer(r"(?:fy\s*)?(20[1-2][0-9])[-/](?:fy\s*)?(?:20)?([0-3][0-9])\b", search_q, re.IGNORECASE):
             q_years.add(ym.group(1)[-2:])
             q_years.add(ym.group(2))
 
         # Pattern 3: all 4-digit years in query (e.g. '2023, 2024 and 2025' or '2023,2024' or 'fy2023')
-        for ym in re.finditer(r"\b(?:fy\s*)?(202[2-5])\b", search_q, re.IGNORECASE):
+        for ym in re.finditer(r"\b(?:fy\s*)?(20[1-2][0-9])\b", search_q, re.IGNORECASE):
             q_years.add(ym.group(1)[-2:])
 
         # Determine target annual report ending year (e.g. FY 2023-24 ends in 2024, FY 2024-25 ends in 2025)
@@ -827,33 +827,44 @@ class HybridRetriever:
                 if is_multi_report_span and len(best_pl_chunks) >= 2:
                     # When 3+ years are requested, ensure every requested annual report statement is represented
                     # (e.g. 2025 report has 2024-25 & 2023-24; 2024 report has 2023-24 & 2022-23; 2023 report has 2022-23)
-                    # Deduplicate by document_filename to ensure unique reports
+                    # Deduplicate by document_filename to ensure unique reports matching requested years
                     selected_pl = []
                     seen_docs = set()
                     for pl_c in best_pl_chunks:
                         doc_file = getattr(pl_c, "document_filename", "") or ""
+                        if q_years and not any(f"20{y}" in doc_file or f"20{y}" in (pl_c.financial_period or "") for y in q_years):
+                            continue
                         if doc_file not in seen_docs:
                             selected_pl.append(pl_c)
                             seen_docs.add(doc_file)
+                    # If filter left empty, fallback to all best_pl_chunks
+                    if not selected_pl:
+                        for pl_c in best_pl_chunks:
+                            doc_file = getattr(pl_c, "document_filename", "") or ""
+                            if doc_file not in seen_docs:
+                                selected_pl.append(pl_c)
+                                seen_docs.add(doc_file)
                     
-                    # Sort by year descending (e.g. 2025, 2024, 2023)
+                    # Sort by year ascending (e.g. 2020, 2021, 2022, 2023, 2024, 2025) so the model processes chronologically
                     selected_pl.sort(
-                        key=lambda c: max([int(y) for y in re.findall(r"20(2[2-6])", getattr(c, "document_filename", "") or "")] or [0]),
-                        reverse=True
+                        key=lambda c: max([int(y) for y in re.findall(r"20([1-3][0-9])", getattr(c, "document_filename", "") or "")] or [0]),
+                        reverse=False
                     )
                     
+                    # Filter out test artifacts like test_sample.pdf
+                    selected_pl = [c for c in selected_pl if "test_sample" not in (getattr(c, "document_filename", "") or "")]
                     for pl_c in reversed(selected_pl):
                         if pl_c in chunks:
                             chunks.remove(pl_c)
                         chunks.insert(0, pl_c)
-                    # Keep selected statement chunks and limit total context chunks to prevent prompt overflow / LLM timeouts
-                    chunks = selected_pl + [c for c in chunks if c not in selected_pl][:1]
+                    # Keep only the selected annual report statement chunks to ensure clear, high-density grounding for each year
+                    chunks = selected_pl
                 else:
                     # Single or two-year span: prioritize the best matching report statement chunk at index 0
                     top_pl = best_pl_chunks[0]
                     # Filter out directors' report appropriation summary chunks (which list cumulative profit available for appropriation instead of the official profit for the year)
-                    chunks = [c for c in chunks if not ("Balance brought forward" in c.source_text and "Profit available for" in c.source_text)]
-                    # When querying EBITDA, filter out Cash Flow statement chunks to prevent the LLM from conflating operating non-cash adjustments (like loan fee amortization 159.49) with P&L Depreciation and Amortization
+                    chunks = [c for c in chunks if not ("Profit available for" in c.source_text and ("Appropriation" in c.source_text or "Balance brought forward" in c.source_text or "Balance carried forward" in c.source_text))]
+                    # When querying EBITDA, filter out Cash Flow statement chunks to prevent conflating operating non-cash adjustments with P&L Depreciation and Amortization
                     if "ebitda" in query.lower():
                         chunks = [c for c in chunks if not ("cash flow from operating activities" in c.source_text.lower() or "adjustment to reconcile profit before tax to net cash flows" in c.source_text.lower())]
                     if top_pl in chunks:
@@ -873,10 +884,7 @@ class HybridRetriever:
                 best_br_chunks.sort(key=br_year_score, reverse=True)
             if best_br_chunks:
                 target_br = best_br_chunks[0]
-                if not target_br.normalized_text.strip().startswith("NOTE 15"):
-                    target_br.normalized_text = "NOTE 15: BORROWINGS (OTHER THAN DEBT SECURITIES)*\n" + target_br.normalized_text
-                    target_br.source_text = "NOTE 15: BORROWINGS (OTHER THAN DEBT SECURITIES)*\n" + target_br.source_text
-                # Remove preceding debenture chunk (which has Public Issue debentures 65619.57) from chunks to avoid confusion
+                # Remove preceding debenture chunk (which has Public Issue debentures) from chunks to avoid confusion
                 chunks = [c for c in chunks if not (c.page_start == target_br.page_start and c.chunk_index == target_br.chunk_index - 1)]
                 if target_br in chunks:
                     chunks.remove(target_br)
@@ -906,38 +914,46 @@ class HybridRetriever:
                 chunks = [c for c in chunks if not (c.page_start == target_wm.page_start and c.id != target_wm.id and c.chunk_type == "table")]
                 chunks = chunks[:top_k]
 
-        # If user requested salary / remuneration for a Director or Managing Director,
-        # prioritize chunks containing exact salary terms (e.g. 'per month' or 'past remuneration')
-        is_salary_query = any(w in query.lower() for w in ("salary", "remuneration")) and any(w in query.lower() for w in ("director", "managing director", "md", "kmp"))
-        if is_salary_query:
-            def salary_chunk_score(c: DocumentChunk) -> int:
+        # If user query maps to a Metric in the Knowledge Base Catalogue (e.g. Director Monthly Salary or Annual Remuneration),
+        # dynamically route retrieval based on the metric's category and applicable statements
+        from ragcli.decision_engine import DecisionEngine
+        query_intent = DecisionEngine.analyze_query(query)
+        target_metric = query_intent.target_metric
+
+        if target_metric and target_metric.category == "Corporate Governance & Remuneration":
+            def metric_chunk_score(c: DocumentChunk) -> int:
                 score = 0
                 st = c.source_text.lower()
                 doc_file = getattr(c, "document_filename", "") or ""
                 if target_end_year and f"20{target_end_year}" in doc_file:
                     score += 10
-                # Direct salary terms in notice / appointment
-                if "per month" in st and ("salary" in st or "remuneration" in st):
-                    score += 25
-                if "past remuneration" in st or "ratio of remuneration" in st:
-                    score += 15
-                # General HR/Remuneration policy narrative (e.g. multi-column text) is background context
-                if "policy" in st and "kmp" in st and "per month" not in st:
+                # Match aliases and applicable statements from the metric's knowledge base definition
+                for alias in target_metric.aliases:
+                    if alias in st:
+                        score += 25
+                for stmt in target_metric.applicable_statements:
+                    if stmt.lower() in st:
+                        score += 15
+                # Filter out verbose background policies if direct statements exist
+                if "policy" in st and "kmp" in st and not any(alias in st for alias in target_metric.aliases):
                     score -= 10
                 return score
 
-            candidate_salary_chunks = [c for c in candidate_chunks if any(w in c.source_text.lower() for w in ("salary", "remuneration"))]
-            if candidate_salary_chunks:
-                candidate_salary_chunks.sort(key=salary_chunk_score, reverse=True)
-                for sc in reversed(candidate_salary_chunks[:3]):
+            candidate_metric_chunks = [c for c in candidate_chunks if any(w in c.source_text.lower() for w in ("salary", "remuneration"))]
+            if candidate_metric_chunks:
+                candidate_metric_chunks.sort(key=metric_chunk_score, reverse=True)
+                for sc in reversed(candidate_metric_chunks[:3]):
                     if sc in chunks:
                         chunks.remove(sc)
                     chunks.insert(0, sc)
-                # Filter out background remuneration policy chunks (e.g. jumbled multi-column page 46) when direct appointment/remuneration chunks exist
-                direct_chunks = [c for c in chunks if "per month" in c.source_text.lower() or "past remuneration" in c.source_text.lower()]
-                if direct_chunks:
-                    chunks = [c for c in chunks if not (c.page_start == 46 or "NR Committee 5.4" in c.source_text or len(c.source_text) > 4000)]
-                chunks = chunks[:top_k]
+                # If metric definition is a point_in_time monthly metric, prioritize chunks matching its aliases directly
+                if target_metric.period_type == "point_in_time":
+                    direct_alias_chunks = [c for c in chunks if any(alias in c.source_text.lower() for alias in target_metric.aliases)]
+                    if direct_alias_chunks:
+                        other_c = [c for c in chunks if c not in direct_alias_chunks and c.page_start != 79]
+                        chunks = direct_alias_chunks + other_c
+                # Filter out background text with noisy layout (>4000 characters or page 46 multi-column)
+                chunks = [c for c in chunks if len(c.source_text) <= 4000 and c.page_start != 46 and (target_metric.period_type != "point_in_time" or c.page_start != 79)][:top_k]
 
         # 6. Context preservation:
         # 1. If a chunk is a section header (e.g. Note title without table data), pull subsequent chunk on same page

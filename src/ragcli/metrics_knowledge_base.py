@@ -938,6 +938,57 @@ METRICS_CATALOGUE: dict[str, MetricDefinition] = {
         applicable_statements=["All Statements"],
         calculation_method="formula_only",
     ),
+
+    # ---------------------------------------------------------
+    # J. Corporate Governance & Executive Remuneration (121 - 125)
+    # ---------------------------------------------------------
+    "DIRECTOR_MONTHLY_SALARY": MetricDefinition(
+        metric_id="DIRECTOR_MONTHLY_SALARY",
+        metric_name="Director Monthly Salary",
+        aliases=[
+            "salary per month",
+            "monthly salary",
+            "monthly remuneration",
+            "salary per month for managing director",
+            "salary per month for md",
+            "managing director monthly salary",
+            "director monthly salary",
+        ],
+        category="Corporate Governance & Remuneration",
+        definition="Fixed monthly salary specified under terms of appointment or re-appointment resolution for Executive Directors / Managing Director.",
+        formula_expression=None,
+        unit="₹ Lakhs",
+        period_type="point_in_time",
+        applicable_statements=["Notice of AGM", "Terms of Appointment", "Corporate Governance"],
+        calculation_method="direct_only",
+        notes="Stated directly under appointment resolutions (e.g. 'Salary ` 3.00 lakhs per month'). Must never be divided from annual remuneration.",
+    ),
+    "DIRECTOR_ANNUAL_REMUNERATION": MetricDefinition(
+        metric_id="DIRECTOR_ANNUAL_REMUNERATION",
+        metric_name="Director Annual Remuneration",
+        aliases=[
+            "director remuneration",
+            "annual remuneration",
+            "total remuneration of managing director",
+            "managing director remuneration",
+            "past remuneration of managing director",
+            "remuneration for the managing director",
+            "remuneration of managing director",
+            "remuneration for managing director",
+            "remuneration of the managing director",
+            "remuneration of director",
+            "remuneration for director",
+            "remuneration",
+        ],
+        category="Corporate Governance & Remuneration",
+        definition="Total annual remuneration paid during the financial year including salary, perquisites, and commission.",
+        formula_expression=None,
+        unit="₹ Lakhs",
+        period_type="annual",
+        applicable_statements=["Corporate Governance", "Board's Report", "MGT-9", "Median Remuneration Disclosures"],
+        calculation_method="direct_only",
+        notes="Reported in the ratio to median remuneration or MGT-9 extract. Reflects total annual remuneration paid.",
+    ),
 }
 
 

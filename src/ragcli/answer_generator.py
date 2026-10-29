@@ -112,15 +112,11 @@ MANDATORY AUDIT RULES:
       * Do not declare dividend information missing if the dividend schedule or dividend line item is present in the retrieved evidence.
 
 15. DIRECTOR & EXECUTIVE REMUNERATION, SALARY & TERMS:
-    - When asked for salary, monthly salary, or remuneration for a Director or Managing Director:
-      * Check the retrieved evidence for both:
-        1. Fixed monthly salary stated under terms of appointment / re-appointment resolution (e.g., "Salary ` ... per month").
-        2. Total remuneration paid during the financial year (e.g. from the MGT-9 extract, Director remuneration table, or median ratio disclosures).
-      * Always present these details clearly in a Markdown table showing:
-        - Monthly Salary (under terms of appointment): ` ... per month
-        - Total Annual Remuneration (paid for the financial year): ` ... lakhs
-      * Explain that total annual remuneration includes monthly salary, perquisites, and commission on net profits.
-      * Never claim that the monthly salary is missing or unstated when a "Salary ` ... per month" figure is present in the appointment terms of the report.
+    - When asked specifically for "salary per month" or "monthly salary" for a Director or Managing Director:
+      * Extract the exact fixed monthly salary directly stated in the appointment / re-appointment terms (e.g. "Salary ` 3.00 lakhs per month" or "` 3.00 Lakhs per month").
+      * Report the monthly salary directly as the answer.
+      * CRITICAL: Do NOT perform manual division of the total annual remuneration by 12 months (e.g. dividing total remuneration like 130.71 lakhs by 12 to invent a synthetic monthly figure). That is NOT the stated monthly salary because annual remuneration includes commission on net profits and perquisites.
+      * If the user specifically asks for "salary per month" or "monthly salary", report ONLY the monthly salary in the table and answer as requested. Do NOT add unsolicited annual remuneration or calculations unless the user asks for total remuneration.
 """
 
 
@@ -182,22 +178,27 @@ class AnswerGenerator:
         # Detect whether the user asked for multiple distinct fiscal periods vs a single financial year
         import re
         q_lower = question.lower()
-        period_spans = re.findall(r"(?:fy\s*)?202[2-5](?:[-/](?:fy\s*)?(?:20)?2[2-6])?", q_lower)
-        has_and_between_years = bool(re.search(r"(?:20\d{2}|fy\s*\d{2,4})\s+and\s+(?:20\d{2}|fy\s*\d{2,4})", q_lower))
+        period_spans = re.findall(r"(?:fy\s*)?20[1-2][0-9](?:[-/](?:fy\s*)?(?:20)?[0-3][0-9])?", q_lower)
+        has_and_between_years = bool(re.search(r"(?:20\d{2}|fy\s*\d{2,4})\s+(?:to|and)\s+(?:20\d{2}|fy\s*\d{2,4})", q_lower))
         is_multi_year = len(period_spans) > 1 or has_and_between_years
         
         if is_multi_year:
             prompt += "INSTRUCTION FOR MULTI-YEAR QUERY:\n"
             prompt += "- The user is asking for MULTIPLE distinct financial years.\n"
-            prompt += "- You MUST report the exact reported figure for EACH of the requested financial years separately in an itemized bullet list or table.\n"
-            prompt += "- Report all requested years individually. Never omit earlier years or only report the last year.\n"
-            prompt += "- DO NOT add or sum the years together into a single total unless the user explicitly requested 'sum' or 'add together'.\n\n"
+            prompt += "- You are provided with multiple Evidence blocks above, each containing the financial statement from a different Annual Report:\n"
+            prompt += "  * Inspect [Evidence 1], [Evidence 2], [Evidence 3], [Evidence 4], [Evidence 5], [Evidence 6] etc.\n"
+            prompt += "  * Each Evidence block header indicates the Annual Report document and the financial period covered.\n"
+            prompt += "  * Inside each statement, locate the line 'Profit for the year' (or the requested financial line item) and read the figures for each year.\n"
+            prompt += "- You MUST report the reported figure for EVERY requested financial year in a comprehensive, professional Markdown table with columns: `Financial Year`, `Amount (` Lakhs)`, `Source Document`.\n"
+            prompt += "- Do NOT declare figures missing when an Evidence block corresponding to that annual report or financial period is present in the prompt above.\n"
+            prompt += "- DO NOT sum or aggregate the years into a single total unless the user specifically requested 'sum' or 'add together'.\n\n"
         elif period_spans:
             # Single financial year requested
             prompt += "INSTRUCTION FOR SINGLE FISCAL YEAR QUERY:\n"
             prompt += "- The user is asking for a SINGLE financial year.\n"
             prompt += "- Provide the exact reported figures from that requested target financial year's annual report.\n"
-            prompt += "- If the annual report contains executive salary terms, re-appointment resolutions, or remuneration disclosures governing the Managing Director / Director (e.g. 'Salary ` X per month' and annual remuneration paid), report them clearly. Do NOT reject salary terms found in the report.\n"
+            prompt += "- Answer strictly what the user asked: if the user asks specifically for 'salary per month' or 'monthly salary', report ONLY the stated monthly salary (do NOT divide annual totals by 12, and do NOT add unrequested annual figures into the table).\n"
+            prompt += "- If the annual report contains executive salary terms or re-appointment resolutions governing the Managing Director / Director (e.g. 'Salary ` X per month'), extract that exact monthly figure directly.\n"
             prompt += "- When asked for separate notes or line items, report each item's reported total directly in a clean table. Do NOT perform arithmetic addition between separate items unless the user explicitly used arithmetic operation words like 'add', 'plus', or 'sum together'.\n\n"
 
 
@@ -211,7 +212,7 @@ class AnswerGenerator:
         if bool(re.search(r"(?i)\bnotes?\b", q_lower)) or "branch" in q_lower or "branches" in q_lower or "director" in q_lower:
             prompt += "PRESENTATION FORMAT INSTRUCTION:\n"
             prompt += "- Present the figures / items in a clean, professional, fully-formatted Markdown table.\n"
-            prompt += "- Ensure columns have clear headers, aligned separators (`| :--- | :---: |`), and one row per line item / branch so it is easily readable.\n\n"
+            prompt += "- Ensure columns have balanced headers (e.g. `| Item / Designation | Amount / Detail |` or `| Particulars | Figure |`), aligned separators (`| :--- | :---: |`), and one row per item.\n\n"
 
         prompt += "ANSWER (following mandatory audit rules):"
 

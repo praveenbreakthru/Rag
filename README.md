@@ -114,27 +114,20 @@ ragcli documents delete "<document-id>"
 
 ---
 
-## Running Automated Tests
+# Start Ollama & PostgreSQL (if not already running), then launch Streamlit in background
+ollama serve > /dev/null 2>&1 &
+brew services start postgresql@15
+source .venv/bin/activate && cd UI && nohup streamlit run app.py --server.headless=true > ../logs/streamlit.log 2>&1 &
 
-Run the complete test suite:
-```bash
-source .venv/bin/activate
-pytest
-```
-
-cd /Users/breakthru/Desktop/Praveen/Rag
-source .venv/bin/activate
-ragcli chat
-
-
-cd UI
-streamlit run app.py
+http://localhost:8501
 
 
 
-cd UI
-source ../.venv/bin/activate
-streamlit run app.py
+# Kill existing instance on port 8501 and restart cleanly
+kill -9 $(lsof -t -i:8501) 2>/dev/null
+source .venv/bin/activate && cd UI && nohup streamlit run app.py --server.headless=true > ../logs/streamlit.log 2>&1 &
 
 
-http://172.16.15.21:8501
+# Completely stop Streamlit and any running RAG processes
+kill -9 $(lsof -t -i:8501) 2>/dev/null
+pkill -f "streamlit run" 2>/dev/null
